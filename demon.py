@@ -280,3 +280,4 @@ class Demon:
         :return: GSSAPI token (либо пароль в тестовой среде)
         """
         return 'guest'
+

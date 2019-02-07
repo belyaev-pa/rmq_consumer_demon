@@ -7,3 +7,4 @@ HEARTBEAT_INTERVAL = 600
 BLOCKED_CONNECTION_TIMEOUT = 300
 PID_FILE_PATH = "/var/run/security_agent_manager_demon.pid"
 LOG_NAME = "security_agent_manager_demon"
+REPLY_TO = "reply_queue"
