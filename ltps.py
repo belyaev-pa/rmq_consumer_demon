@@ -2,12 +2,14 @@
 import pika
 import json
 import datetime
-from django.conf import settings
+#from django.conf import settings
 from pika import exceptions
 
 
 class LTPSSend:
-    def __init__(self, msg_to, msg_type, msg_from, time_out, task_id, msg_cmd=None, msg_files=None):
+    def __init__(self, msg_to, msg_type, msg_from, time_out, task_id,
+                 msg_cmd=None, msg_files=None, date_init=None, date_start=None,
+                 date_stop=None, result=None, reply_to=None, agent_reply=None):
         """
         для работы модуля нужно добавить в django settings.py следующее
         REPLY_TO = "reply_queue" название очереди
@@ -27,6 +29,7 @@ class LTPSSend:
         -Date_stop: время завершения выполнения задачи агентом
         -Result: результат выполнения задачи
         -Reply_to: наименование очереди для ответа
+        agent_reply указывает на то, что класс вызывает агент
         """
         self.msg_to = msg_to
         self.msg_type = msg_type
@@ -35,6 +38,21 @@ class LTPSSend:
         self.task_id = task_id
         self.msg_cmd = msg_cmd
         self.msg_files = msg_files
+        if date_init is None:
+            self.date_init = datetime.datetime.now()
+        else:
+            self.date_init = date_init
+        self.date_start = date_start
+        self.date_stop = date_stop
+        self.result = result
+        if reply_to is None:
+            self.reply_to = self.get_settings('REPLY_TO')
+        else:
+            self.reply_to = reply_to
+        if agent_reply is None:
+            self.agent_reply = False
+        else:
+            self.agent_reply = True
         self.proceed()
 
     def proceed(self):
@@ -57,10 +75,10 @@ class LTPSSend:
                        task_id=self.task_id,
                        msg_cmd=self.msg_cmd,
                        msg_files=self.msg_files,
-                       date_init=datetime.datetime.now(),
-                       date_start=None,
-                       date_stop=None,
-                       result=None,
+                       date_init=self.date_init,
+                       date_start=self.date_start,
+                       date_stop=self.date_stop,
+                       result=self.result,
                        reply_to=self.reply_to)
         self.message = json.dumps(message, sort_keys=False, default=str)
 
@@ -69,11 +87,11 @@ class LTPSSend:
         connect to rabbitmq
         """
         self.params = pika.ConnectionParameters(
-            host=settings.RABBITMQ_HOST,
-            port=settings.RABBITMQ_PORT,
+            host=self.get_settings('RABBITMQ_HOST'),
+            port=self.get_settings('RABBITMQ_PORT'),
             credentials=pika.credentials.PlainCredentials(self.principal, self.token),
-            heartbeat_interval=settings.HEARTBEAT_INTERVAL,
-            blocked_connection_timeout=settings.BLOCKED_CONNECTION_TIMEOUT,
+            heartbeat_interval=self.get_settings('HEARTBEAT_INTERVAL'),
+            blocked_connection_timeout=self.get_settings('BLOCKED_CONNECTION_TIMEOUT'),
         )
         self.connection = pika.BlockingConnection(
             parameters=self.params,
@@ -100,15 +118,20 @@ class LTPSSend:
     def close_connect(self):
         self.connection.close()
 
-    @property
-    def reply_to(self):
-        """
-        TODO: добавить в settings.py REPLY_TO параметр
-        параметр будет отвечать за название очереди для ответов агентов
-        смысла не несет просто должны называться одинакого
-        :return: наименование очереди ответа
-        """
-        return settings.REPLY_TO
+
+    def get_settings(self, setting):
+        try:
+            from django.conf import settings
+        except ImportError:
+            import conf
+            prop = getattr(conf, setting, None)
+        else:
+            prop = getattr(settings, setting, None)
+        finally:
+            if prop is None:
+                raise SettingIsNoneException
+            return prop
+
 
     @property
     def queue_name(self):
@@ -116,7 +139,10 @@ class LTPSSend:
         TODO: необходимо реализовать свойство возвращающее имя очереди
         :return: наименование очереди прослушиваемой демоном
         """
-        return self.msg_to
+        if self.agent_reply:
+            return self.reply_to
+        else:
+            return self.msg_to
 
     @property
     def principal(self):
@@ -133,6 +159,11 @@ class LTPSSend:
         :return: GSSAPI token (либо пароль в тестовой среде)
         """
         return 'guest'
+
+
+class SettingIsNoneException(Exception):
+    def __init___(self, *args):
+        Exception.__init__(self, "Can`t find {0} in django settings or config file".format(*args))
 
 
 def send_message(msg_to, msg_type, msg_from, time_out, task_id, msg_cmd=None, msg_files=None):
