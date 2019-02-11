@@ -118,7 +118,6 @@ class LTPSSend:
     def close_connect(self):
         self.connection.close()
 
-
     def get_settings(self, setting):
         try:
             from django.conf import settings
@@ -131,7 +130,6 @@ class LTPSSend:
             if prop is None:
                 raise SettingIsNoneException
             return prop
-
 
     @property
     def queue_name(self):
