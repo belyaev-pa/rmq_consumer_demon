@@ -1,0 +1,19 @@
+[Unit]
+Description=Security Agent manager demon
+After=syslog.target network.target
+
+[Service]
+Type=forking
+PIDFile=/var/run/ab_demon.pid
+WorkingDirectory=/usr/local/service
+User=root
+Group=root
+OOMScoreAdjust=-500
+
+ExecStart=python /path/to/script/ab_demon.py start
+ExecReload=python /path/to/script/ab_demon.py restart
+ExecStop=python /path/to/script/ab_demon.py stop
+TimeoutSec=300
+
+[Install]
+WantedBy=multi-user.target

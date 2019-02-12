@@ -120,16 +120,19 @@ class LTPSSend:
 
     def get_settings(self, setting):
         try:
-            from django.conf import settings
+            import django
         except ImportError:
             import conf
             prop = getattr(conf, setting, None)
         else:
-            prop = getattr(settings, setting, None)
-        finally:
-            if prop is None:
-                raise SettingIsNoneException
-            return prop
+            try:
+                prop = getattr(django.conf.settings, setting, None)
+            except:
+                import conf
+                prop = getattr(conf, setting, None)
+        if prop is None:
+            raise SettingIsNoneException
+        return prop
 
     @property
     def queue_name(self):

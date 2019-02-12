@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-import pika
 import json
 import datetime
 import ltps
 import types
 import requests
+import time
 
 
 
@@ -34,9 +34,12 @@ class AgentJobHandler:
 
     def handle_job(self):
         job_to_call = getattr(self, self.msg_type, None)
-        if not isinstance(job_to_call, types.FunctionType):
-            pass # make here to return result is bade type_func to suck function
-        self.result = job_to_call()
+        if isinstance(job_to_call, types.FunctionType):
+            # make here to return result is bade type_func to suck function
+            self.result = job_to_call()
+        else:
+            self.result = 1
+            #here error!
         self.date_stop = datetime.datetime.now()
         ltps.LTPSSend(msg_to=self.msg_to,
                       msg_type=self.msg_type,
@@ -51,6 +54,29 @@ class AgentJobHandler:
                       result=self.result,
                       reply_to=self.reply_to,
                       agent_reply=True)
+
+    # def proc(self):
+
+    def vcard(self):
+        time.sleep(10)
+        self.result = 0
+
+    def schedule(self):
+        time.sleep(10)
+        self.result = 0
+
+    def control_aide(self):
+        time.sleep(10)
+        self.result = 0
+
+    def control_avp(self):
+        time.sleep(10)
+        self.result = 0
+
+    def whitelist(self):
+        time.sleep(10)
+        self.result = 0
+
 
 
 class SBJobHandler:
@@ -67,5 +93,5 @@ class SBJobHandler:
         url = "http://localhost:8080/rest/tasks/current-tasks/close/"
         data = {'data': self.msg}
         headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
-        r = requests.post(url, data=json.dumps(data), headers=headers)
+        requests.put(url, data=json.dumps(data), headers=headers)
 

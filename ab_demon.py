@@ -9,7 +9,7 @@ class ReactFunction:
     Класс команд обрабатываемых агентом
     для добавления команды, необходимо добавить
     новую функцию в класс из консоли будет вызываться
-    python main.py new_command
+    python ab_demon.py new_command
     """
     def __init__(self, _daemon):
         """
@@ -69,7 +69,7 @@ class DaemonConfigurator:
 
 
 if __name__ == "__main__":
-    daemon = demon.Demon(conf.PID_FILE_PATH)
+    daemon = demon.Demon(conf.PID_FILE_PATH, conf.QUEUE_NAME, conf.LOG_NAME, 'ab')
     config = DaemonConfigurator(daemon)
     react_dict = config.get_reacts_for_demon()
 
