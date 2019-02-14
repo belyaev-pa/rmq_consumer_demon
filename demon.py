@@ -11,7 +11,7 @@ import rabbit_listener
 
 class Demon:
 
-    def __init__(self, pidfile, queue_name, log_name, ab_sb,
+    def __init__(self, pidfile, queue_name, log_name, demon_type,
                  stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
         """
         конструктор демона
@@ -26,7 +26,7 @@ class Demon:
         self.pidfile = pidfile
         self.queue_name = queue_name
         self.log_name = log_name
-        self.ab_sb = ab_sb
+        self.demon_type = demon_type
         syslog.openlog(self.log_name)
         syslog.syslog(syslog.LOG_INFO, '{} Initialising security agent demon'.format(datetime.datetime.now()))
 
@@ -166,5 +166,5 @@ class Demon:
 
     def run(self):
         atexit.register(self.close_connect)
-        self.listener = rabbit_listener.RabbitMQListener(self.queue_name, self.log_name, self.ab_sb)
+        self.listener = rabbit_listener.RabbitMQListener(self.queue_name, self.log_name, self.demon_type)
 

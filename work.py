@@ -5,6 +5,7 @@ import ltps
 import types
 import requests
 import time
+import subprocess
 
 
 
@@ -57,7 +58,17 @@ class AgentJobHandler:
                       reply_to=self.reply_to,
                       agent_reply=True)
 
-    # def proc(self):
+    def proc(self):
+        p = subprocess.Popen(self.msg_cmd,
+                             shell=True,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+
+        for line in iter(p.stdout.readline, b''):
+            print(line.strip())
+        print('--------------------')
+        for line in iter(p.stderr.readline, b''):
+            print(line.strip())
 
     def vcard(self):
         time.sleep(10)

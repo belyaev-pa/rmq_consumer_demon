@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import pika
 import threading
 import functools
 import conf
@@ -7,9 +6,10 @@ import syslog
 import datetime
 import work
 from pika import exceptions
+from base_rabbit_connector import BaseRabbitMQ
 
 
-class RabbitMQListener:
+class RabbitMQListener(BaseRabbitMQ):
 
     def __init__(self, queue_name, log_name, ab_sb):
         """
@@ -23,8 +23,9 @@ class RabbitMQListener:
         # self.stdout = stdout
         # self.stderr = stderr
         # self.pidfile = pidfile
-        self.queue_name = queue_name
+        super(RabbitMQListener, self).__init__(queue_name)
         self.log_name = log_name
+        # TODO: make адекватную передачу типа демона (динамический поиск класса для работы)
         self.ab_sb = ab_sb
         syslog.openlog(self.log_name)
         syslog.syslog(syslog.LOG_INFO, '{} Initialising security agent demon'.format(datetime.datetime.now()))
@@ -52,35 +53,6 @@ class RabbitMQListener:
                     thread.join()
                 # write log here
 
-
-    def connect(self):
-        """
-        NOTE: prefetch is set to 1 here for test to keep the number of threads created
-        to a reasonable amount. We can to test with different prefetch values
-        to find which one provides the best performance and usability for your solution
-
-        :return: None (void)
-        """
-        self.params = pika.ConnectionParameters(
-            host=conf.RABBITMQ_HOST,
-            port=conf.RABBITMQ_PORT,
-            credentials=pika.credentials.PlainCredentials(self.principal, self.token),
-            heartbeat_interval=conf.HEARTBEAT_INTERVAL,
-            blocked_connection_timeout=conf.BLOCKED_CONNECTION_TIMEOUT,
-        )
-        self.connection = pika.BlockingConnection(
-            parameters=self.params,
-        )
-        self.channel = self.connection.channel()
-        self.queue = self.channel.queue_declare(
-            queue=self.queue_name,
-            durable=True,
-            exclusive=False,
-            auto_delete=False,
-        )
-        self.channel.basic_qos(prefetch_count=1)
-
-
     def ack_message(self, ch, delivery_tag):
         """
         функция возврата ack для RabbitMQ
@@ -88,12 +60,13 @@ class RabbitMQListener:
         the message being ACKed was retrieved (AMQP protocol constraint).
         """
         if self.channel.is_open:
+            # here we need to try basic_ack to catch connect error
+            # after ack we need to flush log file
             self.channel.basic_ack(self.delivery_tag)
         else:
             # Channel is already closed, so we can't ACK this message;
             # log and/or do something that makes sense for your app in this case.
             pass
-
 
     def do_work(self, conn, ch, delivery_tag, body):
         """
@@ -104,13 +77,13 @@ class RabbitMQListener:
         # Sleeping to simulate 10 seconds of work (we need to code work here)
         """
         # time.sleep(10)
+        # необходимо переработать вызов класса воркера тут как указан ов to_do в __init__
         if self.ab_sb == 'ab':
             work.AgentJobHandler(body)
         elif self.ab_sb == 'sb':
             work.SBJobHandler(body)
         callback = functools.partial(self.ack_message, ch, delivery_tag)
         self.connection.add_callback_threadsafe(callback)
-
 
     def on_message(self, ch, method_frame, header_frame, body):
         """
@@ -127,32 +100,6 @@ class RabbitMQListener:
         thr = threading.Thread(target=self.do_work, args=(self.connection, ch, self.delivery_tag, body))
         thr.start()
         self.threads.append(thr)
-
-
-    # @property
-    # def queue_name(self):
-    #     """
-    #     TODO: необходимо реализовать свойство возвращающее имя очереди
-    #     :return: наименование очереди прослушиваемой демоном
-    #     """
-    #     return conf.QUEUE_NAME
-
-    @property
-    def principal(self):
-        """
-        не будет участвовать в аутентификации поэтому может быть любым
-        :return: principal пользователя
-        """
-        return 'guest'
-
-
-    @property
-    def token(self):
-        """
-        TODO: необходимо добавить SPNEGO аутентификацию (генерацию токена) сюда
-        :return: GSSAPI token (либо пароль в тестовой среде)
-        """
-        return 'guest'
 
 
 if __name__ == "__main__":
