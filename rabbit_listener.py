@@ -2,7 +2,6 @@
 import threading
 import functools
 import conf
-import syslog
 import datetime
 import work
 from pika import exceptions
@@ -27,8 +26,6 @@ class RabbitMQListener(BaseRabbitMQ):
         self.log_name = log_name
         # TODO: make адекватную передачу типа демона (динамический поиск класса для работы)
         self.ab_sb = ab_sb
-        syslog.openlog(self.log_name)
-        syslog.syslog(syslog.LOG_INFO, '{} Initialising security agent demon'.format(datetime.datetime.now()))
         self.run()
 
     def close_connect(self):
@@ -55,18 +52,20 @@ class RabbitMQListener(BaseRabbitMQ):
 
     def ack_message(self, ch, delivery_tag):
         """
-        функция возврата ack для RabbitMQ
+        функция возврата ack для RabbitMQ + пишем лог файл, если вернули акк
+        очищаем лог файл, если нет пишем в лог файл об этом и ждем тоже
+        сообщение снова, что бы продолжить писать в него
         Note that `channel` must be the same pika channel instance via which
         the message being ACKed was retrieved (AMQP protocol constraint).
         """
         if self.channel.is_open:
-            # here we need to try basic_ack to catch connect error
-            # after ack we need to flush log file
             self.channel.basic_ack(self.delivery_tag)
+            # erasing log file:
+            open(self.get_settings('TMP_LOG_PATH'), 'w').close()
         else:
-            # Channel is already closed, so we can't ACK this message;
-            # log and/or do something that makes sense for your app in this case.
-            pass
+            with open(self.get_settings('TMP_LOG_PATH'), 'a') as log_file:
+                log_file.write("{} cannot return ack to rabbit channel is closed".format(datetime.datetime.now()))
+
 
     def do_work(self, conn, ch, delivery_tag, body):
         """
@@ -79,9 +78,9 @@ class RabbitMQListener(BaseRabbitMQ):
         # time.sleep(10)
         # необходимо переработать вызов класса воркера тут как указан ов to_do в __init__
         if self.ab_sb == 'ab':
-            work.AgentJobHandler(body)
+            work.AgentJobHandler(body, self.get_settings('TMP_LOG_PATH'))
         elif self.ab_sb == 'sb':
-            work.SBJobHandler(body)
+            work.SBJobHandler(body, self.get_settings('TMP_LOG_PATH'))
         callback = functools.partial(self.ack_message, ch, delivery_tag)
         self.connection.add_callback_threadsafe(callback)
 

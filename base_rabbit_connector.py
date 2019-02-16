@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import pika
+import kerberos
 
 
 class BaseRabbitMQ(object):
@@ -43,6 +44,7 @@ class BaseRabbitMQ(object):
             import conf
             prop = getattr(conf, setting, None)
         if prop is None:
+            # TODO: think do we need an exception here code could fall
             raise SettingIsNoneException
         return prop
 
@@ -52,15 +54,24 @@ class BaseRabbitMQ(object):
         не будет участвовать в аутентификации поэтому может быть любым
         :return: principal пользователя
         """
-        return 'guest'
+        if self.get_settings('USE_GSS_API'):
+            return self.get_settings('PRINCIPAL')
+        else:
+            self.get_settings('RABBIT_COMMON_USER')
 
     @property
     def token(self):
         """
-        TODO: необходимо добавить SPNEGO аутентификацию (генерацию токена) сюда
+        для передачи в поле пароль GSS токена
         :return: GSSAPI token (либо пароль в тестовой среде)
         """
-        return 'guest'
+        if self.get_settings('USE_GSS_API'):
+            result, context = kerberos.authGSSClientInit(self.get_settings('RABBITMQ_SPS'),
+                              gssflags=kerberos.GSS_C_SEQUENCE_FLAG, principal=self.get_settings('PRINCIPAL'))
+            result = kerberos.authGSSClientStep(context, '')
+            return kerberos.authGSSClientResponse(context)
+        else:
+            return self.get_settings('')
 
 class SettingIsNoneException(Exception):
     def __init___(self, *args):
