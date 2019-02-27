@@ -80,7 +80,8 @@ class AgentJobHandler(object):
                                        shell=True,
                                        stdout=subprocess.PIPE,
                                        stderr=subprocess.STDOUT)
-
+            exit_code = process.wait()
+            print(exit_code)
             for line in iter(process.stdout.readline, b''):
                 log_file.write(line.strip())
 

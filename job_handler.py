@@ -4,13 +4,9 @@ import json
 import subprocess
 import re
 import datetime
+from conf import SQLLITE_PATH, JSON_CONF_PATH, DATE_FORMAT
 from base_db import BaseDB
 from collections import OrderedDict
-
-
-JSON_CONF_PATH = 'handle_scheme.json'
-SQLLITE_PATH = 'ab.sqlite3'
-DATE_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 
 
 class SingletonMeta(type):
@@ -28,18 +24,22 @@ class SingletonMeta(type):
 class JobHandler(BaseDB):
     __metaclass__ = SingletonMeta
 
-    def __init__(self, job_id, job_type, job_files):
+    def __init__(self, job_id):
+        """
+        Конструктор обработчика заданий
+        TODO: доделать ветку возврата после сбоя
+        :param job_id: id задачи из БД, которую нужно выполнить
+        """
         super(JobHandler, self).__init__(SQLLITE_PATH)
         self.job_id = job_id
-        self.job_type = job_type
-        self.job_files = job_files
+        self.job_type = self.get_job_type()
+        self.job_files = self.make_job_files_dict()
         self.completed_step = self.get_completed_steps()
         with open(JSON_CONF_PATH ,'r') as conf:
             json_conf = json.load(conf.read())
             self.job = json_conf.get(self.job_type, None)
         if self.job is None:
-            sys.exit(1)
-            # печатаем что такой работы не существует
+            sys.exit("не найдено работы с именем {} в конфиг файле...")
         else:
             self.dict_steps = OrderedDict(self.job['job']['handling'])
             self.pre_handle_job()
@@ -52,8 +52,7 @@ class JobHandler(BaseDB):
         :return:
         """
         if self.job['job']['files']['count'] != self.job_files.keys().count():
-            print('кол-во файлов пререданных не совпадает с количеством файлов в конфиге')
-            sys.exit(1)
+            sys.exit('кол-во файлов пререданных не совпадает с количеством файлов в конфиге')
         self.db_connect_open()
         for step_number, cmd in self.dict_steps.iteritems():
             if step_number not in self.completed_step:
@@ -83,8 +82,7 @@ class JobHandler(BaseDB):
         current_step = self.select_db_column('step_number', 'job_id', self.job_id)
         step_cmd = self.dict_steps.get(current_step, None)
         if step_cmd is None:
-            print('в конфигурационном файле нет шага с именем {}'.format(current_step))
-            sys.exit(1)
+            sys.exit('в конфигурационном файле нет шага с именем {}'.format(current_step))
         self.files_in_cmd_inject(step_cmd)
         process = subprocess.Popen(step_cmd,
                                    shell=True,
@@ -108,6 +106,17 @@ class JobHandler(BaseDB):
         pattern = re.compile('{.*}')
         return True if re.search(pattern, cmd_str) else False
 
+    def make_job_files_dict(self):
+        job_files = dict()
+        job_files_string = self.select_db_column('arguments', 'job_id', self.job_id)[0]
+        for obj in job_files_string.split():
+            file_param = obj.split('=')
+            job_files[file_param[0]] = file_param[1]
+        return job_files
+
+    def get_job_type(self):
+        return self.select_db_column('task_type', 'job_id', self.job_id)[0]
+
     def files_in_cmd_inject(self, step_cmd):
         """
         Вставляет в строку cmd пути до файлов
@@ -120,17 +129,3 @@ class JobHandler(BaseDB):
             for obj in self.job['files']['names']:
                 new_cmd_string = new_cmd_string.replace('{'+obj+'}', self.job_files[obj])
         return new_cmd_string
-
-
-if __name__ == '__main__':
-    print(sys.argv)
-    job_type = sys.argv[1] or None
-    job_id = sys.argv[2] or None
-    job_files = dict()
-    # сделать проверку введенных данных
-    # возможно нужно передать id задачи уникальный, что бы понять,
-    # что мы это уже выполняли до перезагрузки
-    for arg in sys.argv[3:]:
-        arg_split = arg.split('=')
-        job_files[arg[0]] = arg[1]
-    JobHandler(job_id, job_type, job_files)

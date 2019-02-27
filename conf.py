@@ -16,3 +16,6 @@ PRINCIPAL = "ksa1c1sb"
 RABBITMQ_SPS = "HTTP@ksa1c1sb.che.ru"
 RABBIT_COMMON_USER = 'guest'
 RABBIT_COMMON_PASSWORD = RABBIT_COMMON_USER
+JSON_CONF_PATH = 'handle_scheme.json'
+SQLLITE_PATH = 'ab.sqlite3'
+DATE_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
