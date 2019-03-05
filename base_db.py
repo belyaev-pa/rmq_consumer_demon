@@ -13,6 +13,7 @@ class BaseDB(object):
 
     def __init__(self, db_path):
         self.db_path = db_path
+        self.db_connect_open()
         
     def db_connect_open(self):
         """

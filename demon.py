@@ -44,8 +44,7 @@ class Demon:
                 sys.exit(0)
         except OSError, e:
             syslog.syslog(syslog.LOG_INFO, '{} fork #1 failed: {}'.format(datetime.datetime.now(), e.errno))
-            sys.stderr.write("fork #1 failed: %d (%s)\n" % (e.errno, e.strerror))
-            sys.exit(1)
+            sys.exit("fork #1 failed: %d (%s)\n" % (e.errno, e.strerror))
 
         # decouple from parent environment
         os.chdir("/")
@@ -60,8 +59,7 @@ class Demon:
                 sys.exit(0)
         except OSError, e:
             syslog.syslog(syslog.LOG_INFO, '{} fork #2 failed: {}'.format(datetime.datetime.now(), e.errno))
-            sys.stderr.write("fork #2 failed: %d (%s)\n" % (e.errno, e.strerror))
-            sys.exit(1)
+            sys.exit("fork #2 failed: %d (%s)\n" % (e.errno, e.strerror))
 
             # redirect standard file descriptors
         sys.stdout.flush()

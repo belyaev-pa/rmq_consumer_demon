@@ -19,3 +19,4 @@ RABBIT_COMMON_PASSWORD = RABBIT_COMMON_USER
 JSON_CONF_PATH = 'handle_scheme.json'
 SQLLITE_PATH = 'ab.sqlite3'
 DATE_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
+JOB_HANDLER_PID_FILE_PATH = '/var/run/ab_demon.pid'

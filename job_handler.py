@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+import os
 import sys
 import json
 import subprocess
 import re
 import datetime
-from conf import SQLLITE_PATH, JSON_CONF_PATH, DATE_FORMAT
+import time
+from conf import SQLLITE_PATH, JSON_CONF_PATH, DATE_FORMAT, JOB_HANDLER_PID_FILE_PATH
 from base_db import BaseDB
 from collections import OrderedDict
 
@@ -28,6 +30,8 @@ class JobHandler(BaseDB):
         """
         Конструктор обработчика заданий
         TODO: доделать ветку возврата после сбоя
+        TODO: сделать создание pid файла и запись pid процесса в файл
+        TODO: добавить + os.remove(JOB_HANDLER_PID_FILE_PATH)
         :param job_id: id задачи из БД, которую нужно выполнить
         """
         super(JobHandler, self).__init__(SQLLITE_PATH)
@@ -35,8 +39,8 @@ class JobHandler(BaseDB):
         self.job_type = self.get_job_type()
         self.job_files = self.make_job_files_dict()
         self.completed_step = self.get_completed_steps()
-        with open(JSON_CONF_PATH ,'r') as conf:
-            json_conf = json.load(conf.read())
+        with open(JSON_CONF_PATH) as conf:
+            json_conf = json.load(conf)
             self.job = json_conf.get(self.job_type, None)
         if self.job is None:
             sys.exit("не найдено работы с именем {} в конфиг файле...")
@@ -51,9 +55,10 @@ class JobHandler(BaseDB):
 
         :return:
         """
-        if self.job['job']['files']['count'] != self.job_files.keys().count():
+        print(self.job['job']['files']['count'])
+        print(len(self.job_files.keys()))
+        if int(self.job['job']['files']['count']) != len(self.job_files.keys()):
             sys.exit('кол-во файлов пререданных не совпадает с количеством файлов в конфиге')
-        self.db_connect_open()
         for step_number, cmd in self.dict_steps.iteritems():
             if step_number not in self.completed_step:
                 self.update_db_column('step_number',
@@ -79,12 +84,12 @@ class JobHandler(BaseDB):
         необходимо вызвать для каждого шага
         :return:  void
         """
-        current_step = self.select_db_column('step_number', 'job_id', self.job_id)
+        current_step = self.select_db_column('step_number', 'job_id', self.job_id)[0]['step_number']
         step_cmd = self.dict_steps.get(current_step, None)
         if step_cmd is None:
             sys.exit('в конфигурационном файле нет шага с именем {}'.format(current_step))
-        self.files_in_cmd_inject(step_cmd)
-        process = subprocess.Popen(step_cmd,
+        new_cmd = self.files_in_cmd_inject(step_cmd)
+        process = subprocess.Popen(new_cmd,
                                    shell=True,
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT)
@@ -92,8 +97,8 @@ class JobHandler(BaseDB):
             print(line.strip())
 
     def get_completed_steps(self):
-        completed_steps = self.select_db_column('completed_steps', 'job_id', self.job_id)[0]
-        return completed_steps['completed_steps'].split()
+        completed_steps = self.select_db_column('completed_steps', 'job_id', self.job_id)[0]['completed_steps']
+        return completed_steps.split()
 
     @staticmethod
     def check_pattern(cmd_str):
@@ -103,19 +108,20 @@ class JobHandler(BaseDB):
         :param cmd_str: вызываемая командная строка
         :return: bool
         """
-        pattern = re.compile('{.*}')
+        pattern = re.compile('\*.*\*')
         return True if re.search(pattern, cmd_str) else False
 
     def make_job_files_dict(self):
         job_files = dict()
-        job_files_string = self.select_db_column('arguments', 'job_id', self.job_id)[0]
+        job_files_string = self.select_db_column('arguments', 'job_id', self.job_id)[0]['arguments']
         for obj in job_files_string.split():
             file_param = obj.split('=')
             job_files[file_param[0]] = file_param[1]
+            print('{} - {}'.format(file_param[0], file_param[1]))
         return job_files
 
     def get_job_type(self):
-        return self.select_db_column('task_type', 'job_id', self.job_id)[0]
+        return self.select_db_column('task_type', 'job_id', self.job_id)[0]['task_type']
 
     def files_in_cmd_inject(self, step_cmd):
         """
@@ -126,6 +132,7 @@ class JobHandler(BaseDB):
         """
         new_cmd_string = step_cmd
         if self.check_pattern(step_cmd):
-            for obj in self.job['files']['names']:
-                new_cmd_string = new_cmd_string.replace('{'+obj+'}', self.job_files[obj])
+            for obj in self.job['job']['files']['names']:
+                rep_str = '*{}*'.format(obj)
+                new_cmd_string = new_cmd_string.replace(rep_str, self.job_files[obj])
         return new_cmd_string
