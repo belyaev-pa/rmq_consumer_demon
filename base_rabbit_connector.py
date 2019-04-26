@@ -45,7 +45,7 @@ class BaseRabbitMQ(object):
             prop = getattr(conf, setting, None)
         if prop is None:
             # TODO: think do we need an exception here code could fall
-            raise SettingIsNoneException
+            raise SettingIsNoneException()
         return prop
 
     @property

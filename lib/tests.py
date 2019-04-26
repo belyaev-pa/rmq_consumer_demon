@@ -3,8 +3,19 @@ import os
 import sys
 import datetime
 import errno
-from job_handler import JobHandler, SQLLITE_PATH, DATE_FORMAT, \
-    BaseDB, JOB_HANDLER_PID_FILE_PATH
+from job_handler import JobHandler, BaseDB
+
+
+LOG_NAME = 'ab_log'
+SQLLITE_PATH = 'ab.sqlite3'
+DATE_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
+JOB_HANDLER_PID_FILE_PATH = '/var/run/ab_demon.pid'
+conf_dict = dict(
+    LOG_NAME=LOG_NAME,
+    DB_PATH=SQLLITE_PATH,
+    JOB_JSON_CONF_PATH='../share/handle_scheme.json',
+    DATE_FORMAT=DATE_FORMAT,
+    )
 
 
 def get_col_with_param_rows_len(col, param):
@@ -14,7 +25,7 @@ def get_col_with_param_rows_len(col, param):
     :param param: параметр чем равна колонка
     :return: int(кол-во строк)
     """
-    db = BaseDB(SQLLITE_PATH)
+    db = BaseDB(conf_dict)
     rows = db.select_db_row(col, param)
     return len(rows)
 
@@ -26,7 +37,7 @@ def get_job_id(status):
     :param status: статус "completed"
     :return: job_id
     """
-    db = BaseDB(SQLLITE_PATH)
+    db = BaseDB(conf_dict)
     return db.select_db_column('job_id', 'status', status)[0]['job_id']
 
 
@@ -36,7 +47,7 @@ def get_job_manager_type(job_id):
     :param job_id: айди задачи
     :return: manager_type
     """
-    db = BaseDB(SQLLITE_PATH)
+    db = BaseDB(conf_dict)
     return db.select_db_column('manager_type', 'job_id', job_id)[0]['manager_type']
 
 
@@ -172,13 +183,15 @@ def do_regular_job(job_id, task_type, arguments, manager_type):
     :param manager_type: тип вызвавшего менеджера локальный или по сети "local" или "net"
     :return: void
     """
-    db = BaseDB(SQLLITE_PATH)
-    insert_tuple = (job_id, 'processing', 'step_1',
+
+    db = BaseDB(conf_dict)
+    insert_tuple = (job_id, 'processing', 0, 'step_1',
                     ' '.join(map(str, arguments)),
                     task_type, manager_type, '',
                     datetime.datetime.now().strftime(DATE_FORMAT), '',)
     db.insert_into_table(insert_tuple)
-    JobHandler(job_id)
+    with JobHandler(job_id, conf_dict) as job:
+        job.run_job()
 
 
 def redo_regular_job(job_id):
@@ -187,7 +200,8 @@ def redo_regular_job(job_id):
     :param job_id:
     :return:
     """
-    JobHandler(job_id)
+    with JobHandler(job_id, conf_dict) as job:
+        job.run_job()
 
 
 if __name__ == '__main__':
@@ -199,6 +213,7 @@ if __name__ == '__main__':
     # if job_type is None:
     #     sys.exit('не передан job_type для выполнения')
     # sys.argv[3:]
-    job_id = '1234567899'
+    job_id = '12345678996'
     job_type = 'test_job'
     main(job_id, job_type, ['log_txt_file=/home/pavel/test_log.txt'], 'net')
+
