@@ -15,6 +15,7 @@ conf_dict = dict(
     DB_PATH=SQLLITE_PATH,
     JOB_JSON_CONF_PATH='../share/handle_scheme.json',
     DATE_FORMAT=DATE_FORMAT,
+    LOG_FILES_DIR='../test/',
     )
 
 
@@ -213,7 +214,7 @@ if __name__ == '__main__':
     # if job_type is None:
     #     sys.exit('не передан job_type для выполнения')
     # sys.argv[3:]
-    job_id = '12345678996'
+    job_id = '12345678999'
     job_type = 'test_job'
     main(job_id, job_type, ['log_txt_file=/home/pavel/test_log.txt'], 'net')
 

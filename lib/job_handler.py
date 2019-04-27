@@ -33,11 +33,11 @@ class JobHandler(BaseDB):
         Конструктор обработчика заданий
         :param job_id: id задачи из БД, которую нужно выполнить
         :param conf_dict: словарь с настройками
-        :param arguments: список аргументов, файлы и пути к ним: ['log_txt_file=/home/pavel/test_log.txt']
-        :param manager_type: тип меджера, который запустил функцию (net или local)
         """
         self.job_id = job_id
         super(JobHandler, self).__init__(conf_dict)
+        self.log_file_path = os.path.join(self.get_settings('LOG_FILES_DIR'), self.job_id+'.log')
+        self.log_file = open(self.log_file_path, 'a')
         syslog.openlog(self.get_settings('LOG_NAME'))
         self.job_handling_error = self.get_job_handling_error
         self.job_type = self.get_job_type
@@ -49,33 +49,39 @@ class JobHandler(BaseDB):
             key = self.job.get('job', None).get('handling', None)
             self.dict_steps = OrderedDict(key)
         if self.job is None or key is None:
-            raise WrongJsonFormatException("Wrong handling json file format in section: {0}".format(self.job))
+            msg = "Wrong handling json file format in section: {0}, {1}\n".format(self.job_id, self.job_type)
+            self.write_log(msg)
+            # raise WrongJsonFormatException(msg)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.job_handling_error:
             self.make_system_reverse()
         super(JobHandler, self).__exit__(exc_type, exc_val, exc_tb)
+        self.log_file.close()
+        syslog.closelog()
 
     def run_job(self):
         """
         вызывает job_handler для каждого шага
         парсим дату
         date_time_obj = datetime.datetime.strptime(date_time_str, "%Y-%m-%d %H:%M:%S.%f")
-
         :return:
         """
+        msg = "{} : Запускаем выполнение задачи id='{}', type='{}'\n".format(datetime.now(), self.job_id, self.job_type)
+        self.write_log(msg)
         print(self.job['job']['files']['count'])
         print(len(self.job_files.keys()))
         if int(self.job['job']['files']['count']) != len(self.job_files.keys()):
-            syslog.syslog(
-                syslog.LOG_INFO,
-                '{} кол-во файлов пререданных не совпадает с количеством файлов в конфиге'.format(datetime.now())
-            )
-            sys.exit('кол-во файлов пререданных не совпадает с количеством файлов в конфиге')
+            msg = "Кол-во файлов пререданных не совпадает с количеством файлов в конфиге: {0}\n".format(self.job_type)
+            self.write_log(msg)
+            return self.log_file_path
+            # raise WrongJsonFormatException(msg)
         for step_number, cmd in self.dict_steps.iteritems():
             if step_number not in self.completed_step:
                 if self.job_handler(step_number, self.dict_steps):
                     self.job_handling_error = True
+                    msg = "Команда '{}' завершилась не успешно, пытаемся восстановиться\n".format(cmd)
+                    self.write_log(msg)
                     break
                 self.update_db_column('step_number',
                                       step_number,
@@ -86,12 +92,17 @@ class JobHandler(BaseDB):
                                       ' '.join(self.completed_step),
                                       'job_id',
                                       self.job_id)
+                msg = "Команда '{}' завершена успешно\n".format(cmd)
+                self.write_log(msg)
         else:
             self.update_db_column('status', 0, 'job_id', self.job_id)
             self.update_db_column('date_finish',
                                   datetime.now().strftime(self.get_settings('DATE_FORMAT')),
                                   'job_id',
                                   self.job_id)
+            msg = "Задача '{}' выполнена успешно\n".format(self.job_id)
+            self.write_log(msg)
+        return self.log_file_path
 
     def job_handler(self, current_step, steps_dict):
         """
@@ -102,7 +113,11 @@ class JobHandler(BaseDB):
         # current_step = self.select_db_column('step_number', 'job_id', self.job_id)[0]['step_number']
         step_cmd = steps_dict.get(current_step, None)
         if step_cmd is None:
-            raise WrongJsonFormatException()
+            self.job_handling_error = True
+            msg = "переданная команда отсутствует в json: {0}\n".format(self.job_type)
+            self.write_log(msg)
+            return self.log_file_path
+            # raise WrongJsonFormatException()
         new_cmd = self.files_in_cmd_inject(step_cmd)
         process = subprocess.Popen(new_cmd,
                                    shell=True,
@@ -147,6 +162,15 @@ class JobHandler(BaseDB):
     def get_job_type(self):
         return self.select_db_column('task_type', 'job_id', self.job_id)[0]['task_type']
 
+    def write_log(self, msg):
+        """
+        функция записи в сислог + в файл
+        :param msg:
+        :return:
+        """
+        self.log_file.write(msg)
+        syslog.syslog(syslog.LOG_INFO, msg)
+
     def files_in_cmd_inject(self, step_cmd):
         """
         Вставляет в строку cmd пути до файлов
@@ -162,16 +186,25 @@ class JobHandler(BaseDB):
         return new_cmd_string
 
     def make_system_reverse(self):
+        msg = "пытаемся восстановить систему {0}\n".format(datetime.now())
+        self.write_log(msg)
         with open(self.get_settings('JOB_JSON_CONF_PATH')) as conf:
             json_conf = json.load(conf)
             recovery_job = json_conf.get(self.job_type, None)
             key = self.job.get('error', None).get('handling', None)
             recovery_dict = OrderedDict(key)
         if recovery_job is None or key is None:
-            raise WrongJsonFormatException()
+            msg = "Команды восстановления отсутствуют в json файле для {0}\n".format(self.job_type)
+            self.write_log(msg)
+            return self.log_file_path
+            # raise WrongJsonFormatException()
         for step_number, cmd in recovery_dict.iteritems():
             if step_number in self.completed_step:
-                self.job_handler(step_number, recovery_dict)
+                if self.job_handler(step_number, recovery_dict):
+                    msg = "{} Команда восстановления '{}' завершилась не успешно\n".format(cmd, datetime.now())
+                    self.write_log(msg)
+                    self.update_db_column('recovery', 1, 'job_id', self.job_id)
+                    break
                 self.update_db_column('step_number',
                                       step_number,
                                       'job_id',
@@ -181,13 +214,17 @@ class JobHandler(BaseDB):
                                       ' '.join(self.completed_step),
                                       'job_id',
                                       self.job_id)
+                msg = "Команда '{}' завершена успешно\n".format(cmd)
+                self.write_log(msg)
         else:
-            self.update_db_column('status', 0, 'job_id', self.job_id)
             self.update_db_column('recovery', 0, 'job_id', self.job_id)
-            self.update_db_column('date_finish',
-                                  datetime.now().strftime(self.get_settings('DATE_FORMAT')),
-                                  'job_id',
-                                  self.job_id)
+            msg = "{} Процедуры восстановления завершилась успешно\n".format(datetime.now())
+            self.write_log(msg)
+        self.update_db_column('status', 0, 'job_id', self.job_id)
+        self.update_db_column('date_finish',
+                              datetime.now().strftime(self.get_settings('DATE_FORMAT')),
+                              'job_id',
+                              self.job_id)
 
 
 class WrongJsonFormatException(Exception):
